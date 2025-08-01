@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Real-Time Chat</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #1e1e1e;
+      color: #f1f1f1;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      background: #222;
+      padding: 10px;
+      text-align: center;
+    }
+    #clock {
+      font-size: 16px;
+      margin-top: 5px;
+      color: #aaa;
+    }
+    #login {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #chat {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+    }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    #online-users {
+      font-size: 14px;
+      margin: 0 10px;
+    }
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 10px;
+      background: #111;
+    }
+    input[type="text"],
+    input[type="file"] {
+      flex: 1 1 auto;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+    }
+    button {
+      background: #28a745;
+      border: none;
+      padding: 10px 15px;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .message {
+      padding: 8px;
+      background: #333;
+      margin: 5px 0;
+      border-radius: 5px;
+      word-wrap: break-word;
+    }
+    .message strong {
+      color: #4caf50;
+    }
+    .admin-controls {
+      display: none;
+      margin: 10px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 600px) {
+      form {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💬 Real-Time Chat</h1>
+    <div id="clock"></div>
+  </header>
+
+  <div id="login">
+    <h2>Login</h2>
+    <label><input type="radio" name="user" value="user1" checked> User 1</label>
+    <label><input type="radio" name="user" value="user2"> Admin</label><br><br>
+
+    <input type="password" id="user-password" placeholder="User password"><br><br>
+    <input type="password" id="admin-password" placeholder="Admin password" style="display:none;"><br><br>
+
+    <button id="login-btn">Login</button>
+  </div>
+
+  <div id="chat">
+    <div id="online-users">Online: </div>
+    <div id="messages"></div>
+    <form id="form">
+      <input id="input" autocomplete="off" placeholder="Type a message..." />
+      <input type="file" id="media" />
+      <button type="submit">Send</button>
+    </form>
+    <div class="admin-controls" id="controls">
+      <button id="clear-btn">🧹 Clear All</button>
+      <button id="terminate-btn" style="display: none;">❌ Quit Session</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const clock = document.getElementById("clock");
+    setInterval(() => {
+      clock.textContent = new Date().toLocaleTimeString();
+    }, 1000);
+
+    const loginDiv = document.getElementById("login");
+    const chatDiv = document.getElementById("chat");
+    const loginBtn = document.getElementById("login-btn");
+    const userPasswordInput = document.getElementById("user-password");
+    const adminPasswordInput = document.getElementById("admin-password");
+    const controls = document.getElementById("controls");
+    const terminateBtn = document.getElementById("terminate-btn");
+
+    let socket;
+    let username;
+
+    // Show relevant password input
+    document.querySelectorAll('input[name="user"]').forEach(radio => {
+      radio.onchange = () => {
+        if (radio.value === "user2") {
+          adminPasswordInput.style.display = "inline-block";
+          userPasswordInput.style.display = "none";
+        } else {
+          adminPasswordInput.style.display = "none";
+          userPasswordInput.style.display = "inline-block";
+        }
+      };
+    });
+
+    loginBtn.onclick = async () => {
+      username = document.querySelector('input[name="user"]:checked').value;
+      const password = username === "user2" ? adminPasswordInput.value : userPasswordInput.value;
+
+      const res = await fetch("https://scientists-photographer-fixtures-weather.trycloudflare.com/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+      if (!res.ok) return alert(data.error);
+
+      loginDiv.style.display = "none";
+      chatDiv.style.display = "flex";
+      controls.style.display = "flex";
+      if (username === "user2") {
+        terminateBtn.style.display = "inline-block";
+      }
+
+      socket = io("https://scientists-photographer-fixtures-weather.trycloudflare.com", {
+        auth: { token: data.token },
+        transports: ["websocket", "polling"]
+      });
+
+      socket.on("chat message", renderMessage);
+      socket.on("chat history", (msgs) => {
+        document.getElementById("messages").innerHTML = "";
+        msgs.forEach(renderMessage);
+      });
+      socket.on("online", (users) => {
+        document.getElementById("online-users").textContent = "Online: " + users.join(", ");
+      });
+    };
+
+    function renderMessage(msg) {
+      const item = document.createElement("div");
+      item.classList.add("message");
+
+      if (msg.text) {
+        const strong = document.createElement("strong");
+        strong.textContent = msg.username + ": ";
+        item.appendChild(strong);
+        item.appendChild(document.createTextNode(msg.text));
+      }
+
+      if (msg.media) {
+        const br = document.createElement("br");
+        const media = document.createElement("a");
+        media.href = msg.media;
+        media.textContent = "📎 Media";
+        media.target = "_blank";
+        item.appendChild(br);
+        item.appendChild(media);
+      }
+
+      document.getElementById("messages").appendChild(item);
+    }
+
+    document.getElementById("form").onsubmit = async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("input");
+      const media = document.getElementById("media");
+      const data = {};
+
+      if (input.value) data.text = input.value;
+
+      if (media.files.length) {
+        const file = media.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        // Upload to your backend (you need a real endpoint)
+        const uploadRes = await fetch("https://scientists-photographer-fixtures-weather.trycloudflare.com/upload", {
+          method: "POST",
+          body: formData
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) {
+          alert("Media upload failed");
+          return;
+        }
+        data.media = uploadData.url;
+      }
+
+      socket.emit("chat message", data);
+      input.value = "";
+      media.value = "";
+    };
+
+    // Clear button for both user1 and admin
+    document.getElementById("clear-btn").onclick = () => {
+      if (confirm("Clear all chat messages?")) {
+        socket.emit("clear-all");
+      }
+    };
+
+    // Only admin can terminate
+    document.getElementById("terminate-btn").onclick = () => {
+      const target = prompt("Terminate which user?");
+      if (target) socket.emit("terminate", target);
+    };
+  </script>
+</body>
+</html>
