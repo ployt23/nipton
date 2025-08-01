@@ -160,7 +160,7 @@
       username = document.querySelector('input[name="user"]:checked').value;
       const password = username === "user2" ? adminPasswordInput.value : userPasswordInput.value;
 
-      const res = await fetch("https://scientists-photographer-fixtures-weather.trycloudflare.com/login", {
+      const res = await fetch("https://mesh-at-provider-hwy.trycloudflare.com/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
@@ -176,7 +176,7 @@
         terminateBtn.style.display = "inline-block";
       }
 
-      socket = io("https://scientists-photographer-fixtures-weather.trycloudflare.com", {
+      socket = io("https://mesh-at-provider-hwy.trycloudflare.com", {
         auth: { token: data.token },
         transports: ["websocket", "polling"]
       });
@@ -229,7 +229,7 @@
         formData.append("file", file);
 
         // Upload to your backend (you need a real endpoint)
-        const uploadRes = await fetch("https://scientists-photographer-fixtures-weather.trycloudflare.com/upload", {
+        const uploadRes = await fetch("https://mesh-at-provider-hwy.trycloudflare.com/upload", {
           method: "POST",
           body: formData
         });
