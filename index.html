@@ -15,17 +15,10 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
+      transition: background 0.3s, color 0.3s;
     }
-    header {
-      background: #222;
-      padding: 10px;
-      text-align: center;
-    }
-    #clock {
-      font-size: 16px;
-      margin-top: 5px;
-      color: #aaa;
-    }
+    header { background: #222; padding: 10px; text-align: center; }
+    #clock { font-size: 16px; margin-top: 5px; color: #aaa; }
     #login {
       flex: 1;
       display: flex;
@@ -34,20 +27,9 @@
       justify-content: center;
       padding: 20px;
     }
-    #chat {
-      display: none;
-      flex: 1;
-      flex-direction: column;
-    }
-    #messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px;
-    }
-    #online-users {
-      font-size: 14px;
-      margin: 0 10px;
-    }
+    #chat { display: none; flex: 1; flex-direction: column; }
+    #messages { flex: 1; overflow-y: auto; padding: 10px; }
+    #online-users { font-size: 14px; margin: 0 10px; }
     form {
       display: flex;
       flex-wrap: wrap;
@@ -55,8 +37,7 @@
       padding: 10px;
       background: #111;
     }
-    input[type="text"],
-    input[type="file"] {
+    input[type="text"], input[type="file"] {
       flex: 1 1 auto;
       padding: 10px;
       border: none;
@@ -76,22 +57,34 @@
       margin: 5px 0;
       border-radius: 5px;
       word-wrap: break-word;
+      position: relative;
     }
-    .message strong {
-      color: #4caf50;
+    .message strong { color: #4caf50; }
+    .timestamp {
+      color: #888;
+      font-size: 12px;
+      margin-left: 5px;
     }
+    .delete-btn {
+      position: absolute;
+      right: 5px;
+      top: 5px;
+      background: transparent;
+      border: none;
+      color: red;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .typing { font-size: 12px; color: #aaa; padding: 0 10px; }
     .admin-controls {
       display: none;
       margin: 10px;
       gap: 10px;
       flex-wrap: wrap;
     }
-
-    @media (max-width: 600px) {
-      form {
-        flex-direction: column;
-      }
-    }
+    .light-mode { background: #fff; color: #000; }
+    .light-mode header { background: #eee; color: #000; }
+    .light-mode .message { background: #f2f2f2; }
   </style>
 </head>
 <body>
@@ -103,22 +96,34 @@
   <div id="login">
     <h2>Login</h2>
     <label><input type="radio" name="user" value="user1" checked> User 1</label>
-    <label><input type="radio" name="user" value="user2"> Admin</label><br><br>
-
-    <input type="password" id="user-password" placeholder="User password"><br><br>
-    <input type="password" id="admin-password" placeholder="Admin password" style="display:none;"><br><br>
-
+    <label><input type="radio" name="user" value="user2"> Admin</label>
+    <br><br>
+    <input type="password" id="user-password" placeholder="User password">
+    <br><br>
+    <input type="password" id="admin-password" placeholder="Admin password" style="display:none;">
+    <br><br>
     <button id="login-btn">Login</button>
   </div>
 
   <div id="chat">
-    <div id="online-users">Online: </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 10px;">
+      <div>
+        <div id="online-users">Online: </div>
+        <div class="typing" id="typing-indicator"></div>
+      </div>
+      <div>
+        <button id="theme-toggle" style="background:#555;">Toggle Theme</button>
+        <button id="logout-btn" style="background: #dc3545;">Logout</button>
+      </div>
+    </div>
+
     <div id="messages"></div>
+
     <form id="form">
       <input id="input" autocomplete="off" placeholder="Type a message..." />
-      <input type="file" id="media" />
       <button type="submit">Send</button>
     </form>
+
     <div class="admin-controls" id="controls">
       <button id="clear-btn">🧹 Clear All</button>
       <button id="terminate-btn" style="display: none;">❌ Quit Session</button>
@@ -128,23 +133,23 @@
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
     const clock = document.getElementById("clock");
-    setInterval(() => {
-      clock.textContent = new Date().toLocaleTimeString();
-    }, 1000);
+    setInterval(() => (clock.textContent = new Date().toLocaleTimeString()), 1000);
 
     const loginDiv = document.getElementById("login");
     const chatDiv = document.getElementById("chat");
     const loginBtn = document.getElementById("login-btn");
+    const logoutBtn = document.getElementById("logout-btn");
+    const themeToggle = document.getElementById("theme-toggle");
+    const typingIndicator = document.getElementById("typing-indicator");
     const userPasswordInput = document.getElementById("user-password");
     const adminPasswordInput = document.getElementById("admin-password");
     const controls = document.getElementById("controls");
     const terminateBtn = document.getElementById("terminate-btn");
+    const messagesDiv = document.getElementById("messages");
 
-    let socket;
-    let username;
+    let socket, username, typingTimeout;
 
-    // Show relevant password input
-    document.querySelectorAll('input[name="user"]').forEach(radio => {
+    document.querySelectorAll('input[name="user"]').forEach((radio) => {
       radio.onchange = () => {
         if (radio.value === "user2") {
           adminPasswordInput.style.display = "inline-block";
@@ -156,15 +161,35 @@
       };
     });
 
+    if (localStorage.getItem("lastUser")) {
+      document.querySelector(
+        `input[name="user"][value="${localStorage.getItem("lastUser")}"]`
+      ).checked = true;
+    }
+
     loginBtn.onclick = async () => {
       username = document.querySelector('input[name="user"]:checked').value;
-      const password = username === "user2" ? adminPasswordInput.value : userPasswordInput.value;
+      const password =
+        username === "user2" ? adminPasswordInput.value : userPasswordInput.value;
 
-      const res = await fetch("https://vendor-chad-landing-exist.trycloudflare.com/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
+      localStorage.setItem("lastUser", username);
+
+      if (
+        (username === "user1" && password !== "ze") ||
+        (username === "user2" && password !== "sel1")
+      ) {
+        alert("Incorrect password");
+        return;
+      }
+
+      const res = await fetch(
+        "https://structured-teddy-clerk-drawing.trycloudflare.com/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        }
+      );
 
       const data = await res.json();
       if (!res.ok) return alert(data.error);
@@ -172,93 +197,110 @@
       loginDiv.style.display = "none";
       chatDiv.style.display = "flex";
       controls.style.display = "flex";
-      if (username === "user2") {
-        terminateBtn.style.display = "inline-block";
-      }
+      if (username === "user2") terminateBtn.style.display = "inline-block";
 
-      socket = io("https://vendor-chad-landing-exist.trycloudflare.com", {
+      socket = io("https://structured-teddy-clerk-drawing.trycloudflare.com/", {
         auth: { token: data.token },
-        transports: ["websocket", "polling"]
+        transports: ["websocket", "polling"],
       });
+
+      // Register this user so Online: updates correctly
+      socket.emit("join", username);
 
       socket.on("chat message", renderMessage);
+
       socket.on("chat history", (msgs) => {
-        document.getElementById("messages").innerHTML = "";
+        messagesDiv.innerHTML = "";
         msgs.forEach(renderMessage);
       });
+
       socket.on("online", (users) => {
-        document.getElementById("online-users").textContent = "Online: " + users.join(", ");
+        document.getElementById("online-users").textContent =
+          "Online: " + users.join(", ");
+      });
+
+      socket.on("typing", (user) => {
+        typingIndicator.textContent =
+          user && user !== username ? `${user} is typing...` : "";
       });
     };
+
+    function formatTimestamp(time) {
+      const date = new Date(time);
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
+      const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return isToday ? `Today ${timeStr}` : `${date.toDateString()} ${timeStr}`;
+    }
 
     function renderMessage(msg) {
       const item = document.createElement("div");
       item.classList.add("message");
 
+      if (msg.username === username) {
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "✖";
+        delBtn.className = "delete-btn";
+        delBtn.onclick = () => item.remove();
+        item.appendChild(delBtn);
+      }
+
       if (msg.text) {
         const strong = document.createElement("strong");
         strong.textContent = msg.username + ": ";
         item.appendChild(strong);
-        item.appendChild(document.createTextNode(msg.text));
+
+        const timestamp = document.createElement("span");
+        timestamp.classList.add("timestamp");
+        timestamp.textContent = formatTimestamp(msg.time || new Date());
+        item.appendChild(timestamp);
+
+        item.appendChild(document.createTextNode(" " + msg.text));
       }
 
-      if (msg.media) {
-        const br = document.createElement("br");
-        const media = document.createElement("a");
-        media.href = msg.media;
-        media.textContent = "📎 Media";
-        media.target = "_blank";
-        item.appendChild(br);
-        item.appendChild(media);
-      }
-
-      document.getElementById("messages").appendChild(item);
+      messagesDiv.appendChild(item);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
     document.getElementById("form").onsubmit = async (e) => {
       e.preventDefault();
+
       const input = document.getElementById("input");
-      const media = document.getElementById("media");
-      const data = {};
+      const data = { username, time: new Date().toISOString() };
 
       if (input.value) data.text = input.value;
 
-      if (media.files.length) {
-        const file = media.files[0];
-        const formData = new FormData();
-        formData.append("file", file);
-
-        // Upload to your backend (you need a real endpoint)
-        const uploadRes = await fetch("https://vendor-chad-landing-exist.trycloudflare.com", {
-          method: "POST",
-          body: formData
-        });
-
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) {
-          alert("Media upload failed");
-          return;
-        }
-        data.media = uploadData.url;
-      }
-
       socket.emit("chat message", data);
       input.value = "";
-      media.value = "";
+      socket.emit("typing", "");
     };
 
-    // Clear button for both user1 and admin
+    document.getElementById("input").oninput = () => {
+      socket.emit("typing", username);
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => socket.emit("typing", ""), 1000);
+    };
+
     document.getElementById("clear-btn").onclick = () => {
-      if (confirm("Clear all chat messages?")) {
-        socket.emit("clear-all");
-      }
+      if (confirm("Clear all chat messages?")) socket.emit("clear-all");
     };
 
-    // Only admin can terminate
     document.getElementById("terminate-btn").onclick = () => {
       const target = prompt("Terminate which user?");
       if (target) socket.emit("terminate", target);
     };
+
+    logoutBtn.onclick = () => {
+      if (socket) socket.disconnect();
+      username = null;
+      messagesDiv.innerHTML = "";
+      chatDiv.style.display = "none";
+      loginDiv.style.display = "flex";
+      userPasswordInput.value = "";
+      adminPasswordInput.value = "";
+    };
+
+    themeToggle.onclick = () => document.body.classList.toggle("light-mode");
   </script>
 </body>
 </html>
