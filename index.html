@@ -130,7 +130,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://tom-markets-convenient-desert.trycloudflare.com/socket.io/socket.io.js"></script>
   <script>
     const clock = document.getElementById("clock");
     setInterval(() => (clock.textContent = new Date().toLocaleTimeString()), 1000);
@@ -183,7 +183,7 @@
       }
 
       const res = await fetch(
-        "https://application-mining-distributors-typically.trycloudflare.com/login",
+        "https://tom-markets-convenient-desert.trycloudflare.com/login",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -199,13 +199,24 @@
       controls.style.display = "flex";
       if (username === "user2") terminateBtn.style.display = "inline-block";
 
-      socket = io("https://application-mining-distributors-typically.trycloudflare.com", {
+      socket = io("https://tom-markets-convenient-desert.trycloudflare.com", {
         auth: { token: data.token },
         transports: ["websocket", "polling"],
       });
 
-      // Register this user so Online: updates correctly
-      socket.emit("join", username);
+      socket.on("connect", () => {
+        console.log("Socket connected:", socket.id);
+        socket.emit("join", username);
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("Socket connection error:", err);
+        alert("Socket connection failed: " + err.message);
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log("Socket disconnected:", reason);
+      });
 
       socket.on("chat message", renderMessage);
 
