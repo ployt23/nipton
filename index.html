@@ -183,7 +183,7 @@
       }
 
       const res = await fetch(
-        "https://structured-teddy-clerk-drawing.trycloudflare.com/login",
+        "https://liberty-eleven-sodium-wallet.trycloudflare.com//login",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -199,7 +199,7 @@
       controls.style.display = "flex";
       if (username === "user2") terminateBtn.style.display = "inline-block";
 
-      socket = io("https://structured-teddy-clerk-drawing.trycloudflare.com/", {
+      socket = io("https://liberty-eleven-sodium-wallet.trycloudflare.com//", {
         auth: { token: data.token },
         transports: ["websocket", "polling"],
       });
